@@ -167,3 +167,102 @@ joint_dataset = TensorDataset(t_x, t_y)
 for example in joint_dataset:
     print('  x: ', example[0],
           '  y: ', example[1])
+
+
+# ### Shuffle, batch, and repeat
+torch.manual_seed(1)
+data_loader = DataLoader(dataset=joint_dataset, batch_size=2, shuffle=True)
+
+for i, batch in enumerate(data_loader, 1):
+    print(f'batch {i}:', 'x:', batch[0], '\n      y:', batch[1])
+
+# Ideally when training a model for multiple epoch,
+# we need to shuffle and iterate over the dataset by the desired number of epochs
+for epoch in range(2):
+    print(f'epoch {epoch+1}')
+    for i, batch in enumerate(data_loader, 1):
+        print(f'batch {i}:', 'x:', batch[0], '\n      y:', batch[1])
+
+
+# ### Creating a dataset from files on your local storage disk
+import pathlib
+import matplotlib.pyplot as plt
+import os
+from PIL import Image
+imgdir_path = pathlib.Path('cat_dog_images')
+file_list = sorted([str(path) for path in imgdir_path.glob('*.jpg')])
+print(file_list)
+
+fig = plt.figure(figsize=(10, 5))
+for i, file in enumerate(file_list):
+    img = Image.open(file)
+    print('Image shape:', np.array(img).shape)
+    ax = fig.add_subplot(2, 3, i+1)
+    ax.set_xticks([]); ax.set_yticks([])
+    ax.imshow(img)
+    ax.set_title(os.path.basename(file), size=15)
+plt.tight_layout()
+plt.show()
+
+# preprocess images to consistent size, so we don't have different sized aspect ratios
+# Labels on images are provided within their filenames, instead we extract the labels from the list of filenames
+# assigning label 1 to dogs and label 0 to cats.
+labels = [1 if 'dog' in os.path.basename(file) else 0 for file in file_list]
+print(labels)
+
+# Now we have a list of filenames (path of each image) and list of their labels
+# Now we will create joint dataset from two arrays
+
+class ImageDataset(Dataset):
+    def __init__(self, file_name, labels):
+        self.file_list = file_list
+        self.labels = labels
+
+    def __getitem__(self, index):
+        file = self.file_list[index]
+        label = self.labels[index]
+        return file, label
+
+    def __len__(self):
+        return len(self.labels)
+
+image_dataset = ImageDataset(file_list, labels)
+for file, label in image_dataset:
+    print(file, label)
+
+# Transform dataset: load image content from its file path, decode the raw content and resize to desired size, i.e., 80x120
+# use torcvision.transform module to resize image and convert loaed pixels into tensors
+import torchvision.transforms as transforms
+img_height, img_width = 80, 120
+transform = transforms.Compose([
+    transforms.ToTensor(),
+    transforms.Resize((img_height, img_width)),
+])
+
+# update ImageDataset with transform as we defined
+class ImageDataset(Dataset):
+    def __init__(self, file_list, labels, transform=None):
+        self.file_list = file_list
+        self.labels = labels
+        self.transform = transform
+    def __getitem__(self, index):
+        img = Image.open(self.file_list[index])
+        if self.transform is not None:
+            img = self.transform(img)
+        label = self.labels[index]
+        return img, label
+    def __len__(self):
+        return len(self.labels)
+
+image_dataset = ImageDataset(file_list, labels, transform)
+
+fig = plt.figure(figsize=(10, 6))
+for i, example in enumerate(image_dataset):
+    ax = fig.add_subplot(2, 3, i+1)
+    ax.set_xticks([]); ax.set_yticks([])
+    ax.imshow(example[0].numpy().transpose((1, 2, 0)))
+    ax.set_title(f'{example[1]}', size=15)
+plt.tight_layout()
+plt.show()
+
+
